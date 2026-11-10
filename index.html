@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قاعة الدرس الافتراضية | Salle de classe virtuelle</title>
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PeerJS for WebRTC Signaling -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        .active-audio { border: 2px solid #22c55e; box-shadow: 0 0 10px #22c55e; }
+        .blackboard { background-color: #1e293b; border: 8px solid #0f172a; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white font-sans h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid font-bold fa-chalkboard-user text-emerald-400 text-2xl"></i>
+            <h1 class="text-xl font-bold">قاعة الدرس الافتراضية</h1>
+        </div>
+        <div id="room-info" class="hidden flex items-center gap-4 text-sm bg-slate-700 px-4 py-1.5 rounded-full">
+            <span>رمز القاعة: <strong id="display-room-code" class="text-emerald-400 select-all">---</strong></span>
+            <span id="student-count-badge" class="bg-slate-600 px-2 py-0.5 rounded-full text-xs">المشاركون: 1</span>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- Role Selection Modal (Initial Screen) -->
+        <div id="role-modal" class="absolute inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
+            <div class="bg-slate-800 p-8 rounded-2xl max-w-md w-full border border-slate-700 shadow-2xl text-center">
+                <h2 class="text-2xl font-bold mb-6 text-emerald-400">مرحباً بك في المنصة</h2>
+                <div class="space-y-4">
+                    <button onclick="setupTeacher()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition">
+                        <i class="fa-solid fa-user-tie"></i> الدخول كـ أستاذ (تسجيل Gmail)
+                    </button>
+                    <div class="relative my-4">
+                        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-600"></div></div>
+                        <div class="relative flex justify-center text-xs text-slate-400"><span class="bg-slate-800 px-2">أو</span></div>
+                    </div>
+                    <div class="space-y-3">
+                        <input type="text" id="student-name" placeholder="اسم التلميذ" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none">
+                        <input type="text" id="room-code-input" placeholder="رمز القاعة" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none">
+                        <button onclick="setupStudent()" class="w-full bg-blue-600 hover:bg-blue-500 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition">
+                            <i class="fa-solid fa-graduation-cap"></i> الانضمام كـ تلميذ
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Display Area / Blackboard -->
+        <main class="flex-1 flex flex-col p-4 bg-slate-950 relative">
+            <div class="flex-1 blackboard rounded-2xl flex items-center justify-center relative overflow-hidden shadow-inner">
+                <!-- Video/Screen Container -->
+                <video id="main-video" autoplay playsinline class="w-full h-full object-contain hidden"></video>
+                
+                <!-- Student Waiting Screen Placeholder -->
+                <div id="waiting-placeholder" class="text-center p-8 space-y-4">
+                    <i class="fa-solid fa-desktop text-6xl text-slate-600 animate-pulse"></i>
+                    <p id="placeholder-text" class="text-slate-400 text-lg">سيظهر الدرس حال تقاسم الأستاذ شاشة الدرس.</p>
+                </div>
+            </div>
+
+            <!-- Global Controls Bar -->
+            <div id="controls-bar" class="mt-4 bg-slate-800 p-3 rounded-xl flex items-center justify-between border border-slate-700 hidden">
+                <div class="flex items-center gap-3">
+                    <!-- Mic Toggle -->
+                    <button id="btn-mic" onclick="toggleMic()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white transition">
+                        <i class="fa-solid fa-microphone-slash text-red-400"></i>
+                    </button>
+
+                    <!-- Teacher-Only Controls -->
+                    <div id="teacher-controls" class="hidden flex items-center gap-3">
+                        <button id="btn-share" onclick="toggleScreenShare()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-display"></i> تقاسم الشاشة
+                        </button>
+                        <button id="btn-record" onclick="toggleRecording()" class="bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-circle"></i> بدء التسجيل
+                        </button>
+                    </div>
+
+                    <!-- Student-Only Controls -->
+                    <div id="student-controls" class="hidden flex items-center gap-3">
+                        <button id="btn-raise-hand" onclick="raiseHand()" class="bg-amber-600 hover:bg-amber-500 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-hand"></i> رفع اليد
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Side Toggles -->
+                <div class="flex items-center gap-3">
+                    <button id="btn-toggle-list" onclick="toggleSidebar('list')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white hidden">
+                        <i class="fa-solid fa-users"></i>
+                    </button>
+                    <button id="btn-toggle-chat" onclick="toggleSidebar('chat')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white relative">
+                        <i class="fa-solid fa-comments"></i>
+                        <span id="chat-badge" class="absolute -top-1 -right-1 bg-red-500 text-xs w-4 h-4 rounded-full hidden"></span>
+                    </button>
+                    <button onclick="toggleFullscreen()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white">
+                        <i class="fa-solid fa-expand"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sidebar: Teacher Roster Panel -->
+        <aside id="sidebar-roster" class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col hidden">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-users"></i> قائمة التلاميذ</h3>
+                <div class="flex gap-1">
+                    <button onclick="muteAllStudents(true)" title="كتم الجميع" class="bg-red-600/20 text-red-400 p-2 rounded text-xs">كتم الكل</button>
+                    <button onclick="muteAllStudents(false)" title="تفعيل الجميع" class="bg-emerald-600/20 text-emerald-400 p-2 rounded text-xs">فتح الكل</button>
+                </div>
+            </div>
+            <div id="roster-list" class="flex-1 overflow-y-auto p-4 space-y-2">
+                <!-- Dynamic Participants -->
+            </div>
+        </aside>
+
+        <!-- Sidebar: Messages / Chat Panel -->
+        <aside id="sidebar-chat" class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col hidden">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-comments"></i> الرسائل</h3>
+            </div>
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3">
+                <!-- Messages Stream -->
+            </div>
+            <div class="p-3 border-t border-slate-700 flex gap-2">
+                <input type="text" id="chat-input" placeholder="اكتب رسالة..." class="flex-1 bg-slate-700 px-3 py-2 rounded-lg text-sm text-white focus:outline-none">
+                <button onclick="sendMessage()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded-lg text-white"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- Application Core Logic -->
+    <script>
+        let isTeacher = false;
+        let peer = null;
+        let myStream = null;
+        let screenStream = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let connections = {};
+        let participants = {};
+
+        // 1. Initial Setup
+        function setupTeacher() {
+            isTeacher = true;
+            const roomCode = Math.floor(100000 + Math.random() * 900000).toString();
+            document.getElementById('display-room-code').innerText = roomCode;
+            initPeer(roomCode);
+            showTeacherUI();
+        }
+
+        function setupStudent() {
+            const name = document.getElementById('student-name').value.trim();
+            const code = document.getElementById('room-code-input').value.trim();
+            if(!name || !code) return alert('الرجاء إدخال الاسم ورمز القاعة');
+            
+            isTeacher = false;
+            initPeer(null);
+            connectToTeacher(code, name);
+            showStudentUI();
+        }
+
+        // 2. PeerJS Connections Setup
+        function initPeer(id) {
+            peer = id ? new Peer(id) : new Peer();
+            
+            peer.on('open', (peerId) => {
+                document.getElementById('role-modal').classList.add('hidden');
+                document.getElementById('room-info').classList.remove('hidden');
+                document.getElementById('controls-bar').classList.remove('hidden');
+            });
+
+            peer.on('call', (call) => {
+                call.answer(myStream);
+                call.on('stream', (remoteStream) => {
+                    handleIncomingStream(remoteStream);
+                });
+            });
+
+            peer.on('connection', (conn) => {
+                handleDataConnection(conn);
+            });
+        }
+
+        function connectToTeacher(teacherId, name) {
+            peer.on('open', () => {
+                const conn = peer.connect(teacherId, { metadata: { name: name } });
+                handleDataConnection(conn);
+                
+                // Call teacher to establish audio channel
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    myStream = stream;
+                    stream.getAudioTracks()[0].enabled = false; // Muted by default
+                    const call = peer.call(teacherId, stream);
+                    call.on('stream', handleIncomingStream);
+                });
+            });
+        }
+
+        // 3. UI Management
+        function showTeacherUI() {
+            document.getElementById('teacher-controls').classList.remove('hidden');
+            document.getElementById('btn-toggle-list').classList.remove('hidden');
+            document.getElementById('sidebar-roster').classList.remove('hidden');
+            addRosterItem(peer.id, 'الأستاذ (أنت)', true);
+        }
+
+        function showStudentUI() {
+            document.getElementById('student-controls').classList.remove('hidden');
+        }
+
+        function toggleSidebar(type) {
+            const roster = document.getElementById('sidebar-roster');
+            const chat = document.getElementById('sidebar-chat');
+            if(type === 'list') {
+                roster.classList.toggle('hidden');
+                chat.classList.add('hidden');
+            } else {
+                chat.classList.toggle('hidden');
+                roster.classList.add('hidden');
+                document.getElementById('chat-badge').classList.add('hidden');
+            }
+        }
+
+        // 4. Media & Screen Share
+        async function toggleScreenShare() {
+            if(!screenStream) {
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                    const videoElem = document.getElementById('main-video');
+                    videoElem.srcObject = screenStream;
+                    videoElem.classList.remove('hidden');
+                    document.getElementById('waiting-placeholder').classList.add('hidden');
+                    
+                    // Broadcast screen stream to peers
+                    Object.keys(connections).forEach(peerId => {
+                        peer.call(peerId, screenStream);
+                    });
+
+                    screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+                    document.getElementById('btn-share').classList.replace('bg-emerald-600', 'bg-amber-600');
+                } catch(e) { console.error(e); }
+            } else {
+                stopScreenShare();
+            }
+        }
+
+        function stopScreenShare() {
+            if(screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+                document.getElementById('main-video').classList.add('hidden');
+                document.getElementById('waiting-placeholder').classList.remove('hidden');
+                document.getElementById('btn-share').classList.replace('bg-amber-600', 'bg-emerald-600');
+            }
+        }
+
+        function handleIncomingStream(stream) {
+            const videoElem = document.getElementById('main-video');
+            if(stream.getVideoTracks().length > 0) {
+                videoElem.srcObject = stream;
+                videoElem.classList.remove('hidden');
+                document.getElementById('waiting-placeholder').classList.add('hidden');
+            }
+        }
+
+        // 5. Audio Controls
+        async function toggleMic() {
+            if(!myStream) {
+                myStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+            const track = myStream.getAudioTracks()[0];
+            track.enabled = !track.enabled;
+            
+            const btn = document.getElementById('btn-mic');
+            if(track.enabled) {
+                btn.innerHTML = `<i class="fa-solid fa-microphone text-emerald-400"></i>`;
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-microphone-slash text-red-400"></i>`;
+            }
+        }
+
+        function muteAllStudents(muteState) {
+            Object.values(connections).forEach(conn => {
+                conn.send({ type: 'COMMAND_MUTE', payload: muteState });
+            });
+        }
+
+        // 6. Data Messaging & Control Signals
+        function handleDataConnection(conn) {
+            connections[conn.peer] = conn;
+
+            conn.on('data', (data) => {
+                if(data.type === 'CHAT') {
+                    appendMessage(data.sender, data.text);
+                } else if(data.type === 'HAND_RAISE') {
+                    alert(`تلميذ مرفوع اليد: ${data.sender}`);
+                } else if(data.type === 'COMMAND_MUTE' && !isTeacher) {
+                    if(myStream) myStream.getAudioTracks()[0].enabled = !data.payload;
+                    alert(data.payload ? "تم كتم الصوت من طرف الأستاذ" : "تم تفعيل الصوت من طرف الأستاذ");
+                }
+            });
+
+            conn.on('open', () => {
+                if(isTeacher) {
+                    const studentName = conn.metadata ? conn.metadata.name : 'تلميذ';
+                    addRosterItem(conn.peer, studentName, false);
+                    updateStudentCount();
+                }
+            });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(!text) return;
+
+            appendMessage('أنا', text);
+            Object.values(connections).forEach(conn => {
+                conn.send({ type: 'CHAT', sender: isTeacher ? 'الأستاذ' : 'تلميذ', text: text });
+            });
+            input.value = '';
+        }
+
+        function appendMessage(sender, text) {
+            const box = document.getElementById('chat-messages');
+            const msgNode = document.createElement('div');
+            msgNode.className = "bg-slate-700 p-2.5 rounded-lg text-sm";
+            msgNode.innerHTML = `<strong class="text-emerald-400 block text-xs">${sender}</strong><p>${text}</p>`;
+            box.appendChild(msgNode);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function raiseHand() {
+            Object.values(connections).forEach(conn => {
+                conn.send({ type: 'HAND_RAISE', sender: 'تلميذ' });
+            });
+        }
+
+        // 7. Dynamic Roster & Recording Controls
+        function addRosterItem(id, name, isSelf) {
+            const list = document.getElementById('roster-list');
+            const item = document.createElement('div');
+            item.id = `user-${id}`;
+            item.className = "flex items-center justify-between bg-slate-700 p-2.5 rounded-lg text-sm";
+            item.innerHTML = `
+                <span>${name}</span>
+                <i class="fa-solid fa-microphone text-slate-400" id="mic-icon-${id}"></i>
+            `;
+            list.appendChild(item);
+        }
+
+        function updateStudentCount() {
+            const count = Object.keys(connections).length + 1;
+            document.getElementById('student-count-badge').innerText = `المشاركون: ${count}`;
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function toggleRecording() {
+            if(!recordedChunks.length && !mediaRecorder) {
+                const streamToRecord = screenStream || myStream;
+                if(!streamToRecord) return alert("لا يوجد محتوى شغال لتسجيله!");
+                
+                mediaRecorder = new MediaRecorder(streamToRecord, { mimeType: 'video/webm;codecs=vp9,opus' });
+                mediaRecorder.ondataavailable = e => { if(e.data.size > 0) recordedChunks.push(e.data); };
+                mediaRecorder.onstop = saveVideoFile;
+                mediaRecorder.start();
+                document.getElementById('btn-record').innerHTML = `<i class="fa-solid fa-stop"></i> إيقاف التسجيل`;
+            } else {
+                mediaRecorder.stop();
+            }
+        }
+
+        function saveVideoFile() {
+            const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `حصة_الدرس_${new Date().toISOString().slice(0,10)}.mp4`;
+            a.click();
+            recordedChunks = [];
+            mediaRecorder = null;
+            document.getElementById('btn-record').innerHTML = `<i class="fa-solid fa-circle"></i> بدء التسجيل`;
+        }
+    </script>
+</body>
+</html>
