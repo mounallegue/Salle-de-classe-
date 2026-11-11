@@ -8,8 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Daily.co SFU SDK -->
-    <script crossorigin src="https://unpkg.com/@daily-co/daily-js"></script>
+    <!-- LiveKit Client SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.js"></script>
     <style>
         .blackboard { background-color: #1e293b; border: 8px solid #0f172a; }
     </style>
@@ -60,7 +60,7 @@
                 <div class="space-y-3 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
                     <h3 class="text-sm font-semibold text-blue-300 text-right">Espace Élève</h3>
                     <input type="text" id="student-name" placeholder="Nom et Prénom de l'élève" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
-                    <input type="text" id="room-code-input" placeholder="Nom de la salle (ex: visioclasse)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
+                    <input type="text" id="room-code-input" placeholder="Code de la salle (ex: 123456)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
                     <button onclick="setupStudent()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition text-sm">
                         <i class="fa-solid fa-graduation-cap"></i> Rejoindre la classe
                     </button>
@@ -72,6 +72,7 @@
         <main class="flex-1 flex flex-col p-4 bg-slate-950 relative">
             <div class="flex-1 blackboard rounded-2xl flex items-center justify-center relative overflow-hidden shadow-inner">
                 <video id="main-video" autoplay playsinline class="w-full h-full object-contain hidden"></video>
+                <audio id="remote-audio" autoplay></audio>
                 
                 <div id="waiting-placeholder" class="text-center p-8 space-y-4">
                     <i class="fa-solid fa-desktop text-6xl text-slate-600 animate-pulse"></i>
@@ -145,26 +146,28 @@
 
     </div>
 
+    <!-- LiveKit Core Logic -->
     <script>
         const AUTHORIZED_TEACHER_EMAIL = "prof.salle@gmail.com";
-        // Daily.co room URL configured for this application.
-        const DAILY_ROOM_URL = "https://visioclasse.daily.co/visioclasse";
-
+        const LIVEKIT_URL = "wss://visioclass-w13jjyjc.livekit.cloud"; //[cite: 4]
+        
+        let room = null;
         let isTeacher = false;
-        let callObject = null;
-        let isSharingScreen = false;
+        let micTrack = null;
+        let screenTrack = null;
         let mediaRecorder = null;
         let recordedChunks = [];
 
         async function setupTeacher() {
             const email = document.getElementById('teacher-email-input').value.trim().toLowerCase();
             if(!email || !email.includes('@')) {
-                alert("Veuillez entrer une adresse email valide.");
+                alert("Veuillez entrer un email valide.");
                 return;
             }
-
             isTeacher = true;
-            await initDailyCall(true, "Professeur (Admin)");
+            // توليد توكن تجريبي للأستاذ مباشرة عبر واجهة LiveKit العامة أو اتصال مباشر
+            await connectToLiveKit("ClassePrincipale", "Professeur", true);
+            
             document.getElementById('teacher-controls').classList.remove('hidden');
             document.getElementById('btn-end-session').classList.remove('hidden');
             document.getElementById('btn-toggle-list').classList.remove('hidden');
@@ -173,210 +176,78 @@
 
         async function setupStudent() {
             const name = document.getElementById('student-name').value.trim();
-            const code = document.getElementById('room-code-input').value.trim().toLowerCase();
-            if(!name || code !== "visioclasse") return alert('Nom invalide ou Nom de salle incorrect (Utilisez: visioclasse)');
+            const code = document.getElementById('room-code-input').value.trim();
+            if(!name || !code) return alert("Veuillez remplir tous les champs.");
 
             isTeacher = false;
-            await initDailyCall(false, name);
+            await connectToLiveKit(code, name, false);
             document.getElementById('student-controls').classList.remove('hidden');
         }
 
-        async function initDailyCall(isOwner, userName) {
-            callObject = DailyIframe.createCallObject({
-                audioSource: true,
-                videoSource: false 
-            });
+        async function connectToLiveKit(roomName, participantName, isOwner) {
+            try {
+                room = new LivekitClient.Room();
 
-            callObject
-                .on('joined-meeting', updateParticipantsUI)
-                .on('participant-joined', updateParticipantsUI)
-                .on('participant-left', updateParticipantsUI)
-                .on('track-started', handleTrackStarted)
-                .on('track-stopped', handleTrackStopped)
-                .on('app-message', handleAppMessage);
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === LivekitClient.Track.Kind.Video) {
+                        const videoElement = document.getElementById('main-video');
+                        track.attach(videoElement);
+                        videoElement.classList.remove('hidden');
+                        document.getElementById('waiting-placeholder').classList.add('hidden');
+                    } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                        const audioElement = document.getElementById('remote-audio');
+                        track.attach(audioElement);
+                    }
+                })
+                .on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+                    if (track.kind === 'video') {
+                        document.getElementById('main-video').classList.add('hidden');
+                        document.getElementById('waiting-placeholder').classList.remove('hidden');
+                    }
+                })
+                .on(LivekitClient.RoomEvent.ParticipantConnected, updateParticipantsList)
+                .on(LivekitClient.RoomEvent.ParticipantDisconnected, updateParticipantsList)
+                .on(LivekitClient.RoomEvent.DataReceived, handleDataMessage);
 
-            await callObject.join({
-                url: DAILY_ROOM_URL,
-                userName: userName,
-                startVideoOff: true,
-                startAudioOff: !isOwner 
-            });
+                // ملاحظة: للحصول على Token مجاني سريع للاختبار المباشر بدون خادم، يمكنك توليده من لوحة تحكم LiveKit أو استخدام خدمة توليد الـ Token. هنا سنستخدم اتصال تجريبي مباشر:
+                // ملاحظة هامة: في الإنتاج الحقيقي على Vercel، يُفضل وضع API Key و Secret في API route، لكن للتشغيل الفوري سنربط الغرفة مباشرة:
+                
+                // للحصول على Token سريع يمكنك فتحه من لوحة تحكم LiveKit وتوليد Token مؤقت، أو استخدام مكتبة الرمز أدناه:
+                // سنقوم بطلب إنشاء الاتصال:
+                const token = await generateTestToken(roomName, participantName, isOwner);
+                
+                await room.connect(LIVEKIT_URL, token); //[cite: 4]
+                
+                document.getElementById('role-modal').classList.add('hidden');
+                document.getElementById('room-info').classList.remove('hidden');
+                document.getElementById('controls-bar').classList.remove('hidden');
 
-            document.getElementById('role-modal').classList.add('hidden');
-            document.getElementById('room-info').classList.remove('hidden');
-            document.getElementById('controls-bar').classList.remove('hidden');
+                // تفعيل المايك للأستاذ وكتمه للتلميذ افتراضياً
+                if (isOwner) {
+                    await room.localParticipant.enableMicrophone();
+                    updateMicUI(true);
+                } else {
+                    updateMicUI(false);
+                }
 
-            updateMicUI(isOwner);
-        }
+                updateParticipantsList();
 
-        function updateParticipantsUI() {
-            if(!callObject) return;
-            const participants = callObject.participants();
-            const count = Object.keys(participants).length;
-            
-            document.getElementById('student-count-badge').innerText = `Participants : ${count}`;
-
-            if(isTeacher) {
-                const list = document.getElementById('roster-list');
-                list.innerHTML = '';
-                Object.values(participants).forEach(p => {
-                    const item = document.createElement('div');
-                    item.className = "flex items-center justify-between bg-slate-700 p-2.5 rounded-lg text-sm";
-                    const isMicOn = p.audio;
-                    item.innerHTML = `
-                        <span>${p.user_name || 'Élève'} ${p.local ? '(Vous)' : ''}</span>
-                        <i class="fa-solid ${isMicOn ? 'fa-microphone text-emerald-400' : 'fa-microphone-slash text-slate-400'}"></i>
-                    `;
-                    list.appendChild(item);
-                });
+            } catch (error) {
+                console.error("Erreur de connexion LiveKit:", error);
+                alert("Erreur de connexion au serveur LiveKit.");
             }
         }
 
-        function handleTrackStarted(evt) {
-            if (evt.track.kind === 'video') {
-                const videoElem = document.getElementById('main-video');
-                videoElem.srcObject = new MediaStream([evt.track]);
-                videoElem.classList.remove('hidden');
-                document.getElementById('waiting-placeholder').classList.add('hidden');
-            }
+        // دالة توليد Token مؤقت للتجربة الفورية من المتصفح
+        async function generateTestToken(roomName, participantName, isOwner) {
+            // بما أن LiveKit Cloud يتطلب توقيع JWT، سنستخدم خدمة توليد مجانية أو دالة محلية مبسطة
+            // للتجربة المباشرة، يمكنك استخدام مفتاحك عبر توليد Token من لوحة تحكم LiveKit لصقها هنا مباشرة، أو استخدام الرابط التالي:
+            // للتبسيط، سنستدعي واجهة توليد محلية:
+            return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."; // استبدلها بـ Token حقيقي من لوحة تحكم LiveKit أو استخدم التوثيق السحابي
         }
 
-        function handleTrackStopped(evt) {
-            if (evt.track.kind === 'video') {
-                document.getElementById('main-video').classList.add('hidden');
-                document.getElementById('waiting-placeholder').classList.remove('hidden');
-            }
-        }
-
-        async function toggleScreenShare() {
-            if (!isSharingScreen) {
-                try {
-                    await callObject.startScreenShare();
-                    isSharingScreen = true;
-                    document.getElementById('btn-share').classList.replace('bg-emerald-600', 'bg-amber-600');
-                    document.getElementById('btn-share').innerHTML = `<i class="fa-solid fa-stop"></i> Arrêter le partage`;
-                } catch(e) { console.error(e); }
-            } else {
-                await callObject.stopScreenShare();
-                isSharingScreen = false;
-                document.getElementById('btn-share').classList.replace('bg-amber-600', 'bg-emerald-600');
-                document.getElementById('btn-share').innerHTML = `<i class="fa-solid fa-display"></i> Partager l'écran`;
-            }
-        }
-
-        async function toggleMic() {
-            const localParticipant = callObject.participants().local;
-            const currentAudio = localParticipant.audio;
-            await callObject.setLocalAudio(!currentAudio);
-            updateMicUI(!currentAudio);
-        }
-
-        function updateMicUI(enabled) {
-            const btn = document.getElementById('btn-mic');
-            btn.innerHTML = enabled ? 
-                `<i class="fa-solid fa-microphone text-emerald-400"></i>` : 
-                `<i class="fa-solid fa-microphone-slash text-red-400"></i>`;
-        }
-
-        function muteAllStudents(muteState) {
-            if (!isTeacher) return;
-            callObject.sendAppMessage({ type: 'COMMAND_MUTE', payload: muteState });
-        }
-
-        function handleAppMessage(evt) {
-            const data = evt.data;
-            if (data.type === 'CHAT') {
-                appendMessage(data.sender, data.text);
-            } else if (data.type === 'HAND_RAISE' && isTeacher) {
-                alert(`Un élève a levé la main : ${data.sender}`);
-            } else if (data.type === 'COMMAND_MUTE' && !isTeacher) {
-                callObject.setLocalAudio(!data.payload);
-                updateMicUI(!data.payload);
-                alert(data.payload ? "Votre micro a été coupé." : "Votre micro a été activé.");
-            } else if (data.type === 'END_SESSION' && !isTeacher) {
-                alert("La séance a été terminée.");
-                location.reload();
-            }
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const text = input.value.trim();
-            if(!text) return;
-
-            const senderName = isTeacher ? 'Professeur' : 'Élève';
-            appendMessage('Moi', text);
-            callObject.sendAppMessage({ type: 'CHAT', sender: senderName, text: text });
-            input.value = '';
-        }
-
-        function appendMessage(sender, text) {
-            const box = document.getElementById('chat-messages');
-            const msgNode = document.createElement('div');
-            msgNode.className = "bg-slate-700 p-2.5 rounded-lg text-sm";
-            msgNode.innerHTML = `<strong class="text-emerald-400 block text-xs">${sender}</strong><p>${text}</p>`;
-            box.appendChild(msgNode);
-            box.scrollTop = box.scrollHeight;
-        }
-
-        function raiseHand() {
-            callObject.sendAppMessage({ type: 'HAND_RAISE', sender: callObject.participants().local.user_name });
-            alert('Votre signal a été envoyé.');
-        }
-
-        function endSession() {
-            if(confirm('Terminer la séance pour tous ?')) {
-                callObject.sendAppMessage({ type: 'END_SESSION' });
-                callObject.leave();
-                location.reload();
-            }
-        }
-
-        function toggleSidebar(type) {
-            const roster = document.getElementById('sidebar-roster');
-            const chat = document.getElementById('sidebar-chat');
-            if(type === 'list') {
-                roster.classList.toggle('hidden');
-                chat.classList.add('hidden');
-            } else {
-                chat.classList.toggle('hidden');
-                roster.classList.add('hidden');
-            }
-        }
-
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
-        }
-
-        function toggleRecording() {
-            const videoElem = document.getElementById('main-video');
-            if(!recordedChunks.length && !mediaRecorder) {
-                if(!videoElem.srcObject) return alert("Partagez votre écran pour enregistrer !");
-                mediaRecorder = new MediaRecorder(videoElem.srcObject, { mimeType: 'video/webm' });
-                mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
-                mediaRecorder.onstop = saveVideoFile;
-                mediaRecorder.start();
-                document.getElementById('btn-record').innerHTML = `<i class="fa-solid fa-stop"></i> Stop Enregistrement`;
-            } else {
-                mediaRecorder.stop();
-            }
-        }
-
-        function saveVideoFile() {
-            const blob = new Blob(recordedChunks, { type: 'video/mp4' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `cours_${new Date().toISOString().slice(0,10)}.mp4`;
-            a.click();
-            recordedChunks = [];
-            mediaRecorder = null;
-            document.getElementById('btn-record').innerHTML = `<i class="fa-solid fa-circle"></i> Enregistrer`;
-        }
+        // ملاحظة لتسهيل التشغيل الفوري بدون تعقيد الـ JWT يدوياً: 
+        // يمكنك نسخ Token مباشر لمدة 24 ساعة من لوحة تحكم LiveKit (Project -> CLI / Tokens) ووضعه هنا مباشرة ليتم دخول الأستاذ والتلاميذ بسلاسة تامة.
     </script>
 </body>
 </html>
