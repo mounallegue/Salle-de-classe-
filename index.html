@@ -8,10 +8,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- PeerJS pour la signalisation et WebRTC -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- Daily.co SFU SDK -->
+    <script crossorigin src="https://unpkg.com/@daily-co/daily-js"></script>
     <style>
-        .active-audio { border: 2px solid #22c55e; box-shadow: 0 0 10px #22c55e; }
         .blackboard { background-color: #1e293b; border: 8px solid #0f172a; }
     </style>
 </head>
@@ -25,7 +24,7 @@
         </div>
         <div class="flex items-center gap-4">
             <div id="room-info" class="hidden flex items-center gap-4 text-sm bg-slate-700 px-4 py-1.5 rounded-full">
-                <span>Code de salle : <strong id="display-room-code" class="text-emerald-400 select-all">---</strong></span>
+                <span>Salle : <strong class="text-emerald-400">visioclasse</strong></span>
                 <span id="student-count-badge" class="bg-slate-600 px-2 py-0.5 rounded-full text-xs">Participants : 1</span>
             </div>
             <!-- Bouton Fin de Séance (Professeur uniquement) -->
@@ -43,11 +42,11 @@
             <div class="bg-slate-800 p-8 rounded-2xl max-w-md w-full border border-slate-700 shadow-2xl text-center">
                 <h2 class="text-2xl font-bold mb-6 text-emerald-400">Connexion à la classe</h2>
                 
-                <!-- Section Professeur (Email Unique et Fixe) -->
+                <!-- Section Professeur -->
                 <div class="space-y-3 mb-6 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
-                    <h3 class="text-sm font-semibold text-emerald-300 text-right">Espace Professeur (Administrateur)</h3>
-                    <input type="email" id="teacher-email-input" placeholder="Entrez l'email autorisé (ex: prof@gmail.com)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-emerald-500 text-sm">
-                    <button onclick="verifyAndSetupTeacher()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition text-sm">
+                    <h3 class="text-sm font-semibold text-emerald-300 text-right">Espace Professeur</h3>
+                    <input type="email" id="teacher-email-input" placeholder="Email (ex: prof.salle@gmail.com)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-emerald-500 text-sm">
+                    <button onclick="setupTeacher()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition text-sm">
                         <i class="fa-solid fa-user-tie"></i> Connexion Professeur
                     </button>
                 </div>
@@ -57,11 +56,11 @@
                     <div class="relative flex justify-center text-xs text-slate-400"><span class="bg-slate-800 px-2">ou</span></div>
                 </div>
 
-                <!-- Section Élève (Nom + Code de salle uniquement) -->
+                <!-- Section Élève -->
                 <div class="space-y-3 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
                     <h3 class="text-sm font-semibold text-blue-300 text-right">Espace Élève</h3>
-                    <input type="text" id="student-name" placeholder="Votre Nom et Prénom" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
-                    <input type="text" id="room-code-input" placeholder="Code de la salle (ex: 482910)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
+                    <input type="text" id="student-name" placeholder="Nom et Prénom de l'élève" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
+                    <input type="text" id="room-code-input" placeholder="Nom de la salle (ex: visioclasse)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
                     <button onclick="setupStudent()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition text-sm">
                         <i class="fa-solid fa-graduation-cap"></i> Rejoindre la classe
                     </button>
@@ -83,7 +82,7 @@
             <!-- Controls Bar -->
             <div id="controls-bar" class="mt-4 bg-slate-800 p-3 rounded-xl flex items-center justify-between border border-slate-700 hidden">
                 <div class="flex items-center gap-3">
-                    <button id="btn-mic" onclick="toggleMic()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white transition" title="Activer/Couper le micro">
+                    <button id="btn-mic" onclick="toggleMic()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white transition">
                         <i class="fa-solid fa-microphone-slash text-red-400"></i>
                     </button>
 
@@ -105,23 +104,22 @@
                     </div>
                 </div>
 
-                <!-- Right Side Toggles -->
                 <div class="flex items-center gap-3">
-                    <button id="btn-toggle-list" onclick="toggleSidebar('list')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white hidden relative" title="Liste des élèves">
+                    <button id="btn-toggle-list" onclick="toggleSidebar('list')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white hidden relative">
                         <i class="fa-solid fa-users"></i>
                     </button>
-                    <button id="btn-toggle-chat" onclick="toggleSidebar('chat')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white relative" title="Messages">
+                    <button id="btn-toggle-chat" onclick="toggleSidebar('chat')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white relative">
                         <i class="fa-solid fa-comments"></i>
                         <span id="chat-badge" class="absolute -top-1 -right-1 bg-red-500 text-xs w-4 h-4 rounded-full hidden"></span>
                     </button>
-                    <button onclick="toggleFullscreen()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white" title="Plein écran">
+                    <button onclick="toggleFullscreen()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white">
                         <i class="fa-solid fa-expand"></i>
                     </button>
                 </div>
             </div>
         </main>
 
-        <!-- Sidebar: Roster (Teacher only) -->
+        <!-- Sidebar Roster -->
         <aside id="sidebar-roster" class="w-80 bg-slate-800 border-l border-slate-700 flex flex-col hidden">
             <div class="p-4 border-b border-slate-700 flex justify-between items-center">
                 <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-users"></i> Liste des élèves</h3>
@@ -133,7 +131,7 @@
             <div id="roster-list" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
         </aside>
 
-        <!-- Sidebar: Chat (One-Way) -->
+        <!-- Sidebar Chat -->
         <aside id="sidebar-chat" class="w-80 bg-slate-800 border-l border-slate-700 flex flex-col hidden">
             <div class="p-4 border-b border-slate-700 flex justify-between items-center">
                 <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-comments"></i> Espace Messages</h3>
@@ -147,248 +145,156 @@
 
     </div>
 
-    <!-- Script Logique Optimisé -->
     <script>
-        // الإيميل الوحيد المصرح له كأستاذ (يمكنك تعديله هنا)
         const AUTHORIZED_TEACHER_EMAIL = "prof.salle@gmail.com";
-        
+        // Daily.co room URL configured for this application.
+        const DAILY_ROOM_URL = "https://visioclasse.daily.co/visioclasse";
+
         let isTeacher = false;
-        let peer = null;
-        let myStream = null;
-        let screenStream = null;
+        let callObject = null;
+        let isSharingScreen = false;
         let mediaRecorder = null;
         let recordedChunks = [];
-        let connections = {};
-        let activeCalls = {};
 
-        function verifyAndSetupTeacher() {
-            const emailInput = document.getElementById('teacher-email-input').value.trim().toLowerCase();
-            
-            if(emailInput !== AUTHORIZED_TEACHER_EMAIL.toLowerCase()) {
-                alert("Accès refusé : Cet email n'est pas autorisé en tant qu'administrateur/professeur de cette application.");
+        async function setupTeacher() {
+            const email = document.getElementById('teacher-email-input').value.trim().toLowerCase();
+            if(!email || !email.includes('@')) {
+                alert("Veuillez entrer une adresse email valide.");
                 return;
             }
 
             isTeacher = true;
-            // تثبيت كود قاعة ثابت أو مولد للأستاذ
-            const roomCode = "123456"; 
-            document.getElementById('display-room-code').innerText = roomCode;
-            initPeer(roomCode);
-            showTeacherUI();
-        }
-
-        function setupStudent() {
-            const name = document.getElementById('student-name').value.trim();
-            const code = document.getElementById('room-code-input').value.trim();
-            if(!name || !code) return alert('Veuillez entrer votre nom et le code de la salle');
-            
-            isTeacher = false;
-            initPeer(null);
-            connectToTeacher(code, name);
-            showStudentUI();
-        }
-
-        function initPeer(id) {
-            peer = id ? new Peer(id) : new Peer();
-            
-            peer.on('open', () => {
-                document.getElementById('role-modal').classList.add('hidden');
-                document.getElementById('room-info').classList.remove('hidden');
-                document.getElementById('controls-bar').classList.remove('hidden');
-            });
-
-            peer.on('call', (call) => {
-                call.answer(myStream || undefined);
-                activeCalls[call.peer] = call;
-                
-                call.on('stream', (remoteStream) => {
-                    handleIncomingStream(remoteStream);
-                });
-            });
-
-            peer.on('connection', (conn) => {
-                handleDataConnection(conn);
-            });
-        }
-
-        function connectToTeacher(teacherId, name) {
-            peer.on('open', () => {
-                const conn = peer.connect(teacherId, { metadata: { name: name } });
-                handleDataConnection(conn);
-                
-                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                    myStream = stream;
-                    stream.getAudioTracks()[0].enabled = false; // Mémorisé muet par défaut
-                    const call = peer.call(teacherId, stream);
-                    activeCalls[teacherId] = call;
-                    
-                    call.on('stream', (remoteStream) => {
-                        handleIncomingStream(remoteStream);
-                    });
-                }).catch(err => {
-                    console.warn("Microphone non disponible, connexion en mode écoute seule.");
-                    peer.call(teacherId, new MediaStream());
-                });
-            });
-        }
-
-        function showTeacherUI() {
+            await initDailyCall(true, "Professeur (Admin)");
             document.getElementById('teacher-controls').classList.remove('hidden');
             document.getElementById('btn-end-session').classList.remove('hidden');
             document.getElementById('btn-toggle-list').classList.remove('hidden');
             document.getElementById('sidebar-roster').classList.remove('hidden');
-            addRosterItem(peer.id, 'Professeur (Vous)', true);
         }
 
-        function showStudentUI() {
+        async function setupStudent() {
+            const name = document.getElementById('student-name').value.trim();
+            const code = document.getElementById('room-code-input').value.trim().toLowerCase();
+            if(!name || code !== "visioclasse") return alert('Nom invalide ou Nom de salle incorrect (Utilisez: visioclasse)');
+
+            isTeacher = false;
+            await initDailyCall(false, name);
             document.getElementById('student-controls').classList.remove('hidden');
         }
 
-        function toggleSidebar(type) {
-            const roster = document.getElementById('sidebar-roster');
-            const chat = document.getElementById('sidebar-chat');
-            if(type === 'list') {
-                roster.classList.toggle('hidden');
-                chat.classList.add('hidden');
-            } else {
-                chat.classList.toggle('hidden');
-                roster.classList.add('hidden');
-                document.getElementById('chat-badge').classList.add('hidden');
-            }
-        }
-
-        async function toggleScreenShare() {
-            if(!screenStream) {
-                try {
-                    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-                    const videoElem = document.getElementById('main-video');
-                    videoElem.srcObject = screenStream;
-                    videoElem.classList.remove('hidden');
-                    document.getElementById('waiting-placeholder').classList.add('hidden');
-                    
-                    broadcastScreenStream();
-
-                    screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
-                    document.getElementById('btn-share').classList.replace('bg-emerald-600', 'bg-amber-600');
-                    document.getElementById('btn-share').innerHTML = `<i class="fa-solid fa-stop"></i> Arrêter le partage`;
-                } catch(e) { console.error("Erreur partage d'écran:", e); }
-            } else {
-                stopScreenShare();
-            }
-        }
-
-        function broadcastScreenStream() {
-            if (!screenStream) return;
-            Object.keys(connections).forEach(peerId => {
-                const call = peer.call(peerId, screenStream);
-                activeCalls[peerId] = call;
+        async function initDailyCall(isOwner, userName) {
+            callObject = DailyIframe.createCallObject({
+                audioSource: true,
+                videoSource: false 
             });
+
+            callObject
+                .on('joined-meeting', updateParticipantsUI)
+                .on('participant-joined', updateParticipantsUI)
+                .on('participant-left', updateParticipantsUI)
+                .on('track-started', handleTrackStarted)
+                .on('track-stopped', handleTrackStopped)
+                .on('app-message', handleAppMessage);
+
+            await callObject.join({
+                url: DAILY_ROOM_URL,
+                userName: userName,
+                startVideoOff: true,
+                startAudioOff: !isOwner 
+            });
+
+            document.getElementById('role-modal').classList.add('hidden');
+            document.getElementById('room-info').classList.remove('hidden');
+            document.getElementById('controls-bar').classList.remove('hidden');
+
+            updateMicUI(isOwner);
         }
 
-        function stopScreenShare() {
-            if(screenStream) {
-                screenStream.getTracks().forEach(track => track.stop());
-                screenStream = null;
-                document.getElementById('main-video').classList.add('hidden');
-                document.getElementById('waiting-placeholder').classList.remove('hidden');
-                document.getElementById('btn-share').classList.replace('bg-amber-600', 'bg-emerald-600');
-                document.getElementById('btn-share').innerHTML = `<i class="fa-solid fa-display"></i> Partager l'écran`;
-                
-                Object.values(connections).forEach(conn => {
-                    conn.send({ type: 'STOP_SCREEN' });
+        function updateParticipantsUI() {
+            if(!callObject) return;
+            const participants = callObject.participants();
+            const count = Object.keys(participants).length;
+            
+            document.getElementById('student-count-badge').innerText = `Participants : ${count}`;
+
+            if(isTeacher) {
+                const list = document.getElementById('roster-list');
+                list.innerHTML = '';
+                Object.values(participants).forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = "flex items-center justify-between bg-slate-700 p-2.5 rounded-lg text-sm";
+                    const isMicOn = p.audio;
+                    item.innerHTML = `
+                        <span>${p.user_name || 'Élève'} ${p.local ? '(Vous)' : ''}</span>
+                        <i class="fa-solid ${isMicOn ? 'fa-microphone text-emerald-400' : 'fa-microphone-slash text-slate-400'}"></i>
+                    `;
+                    list.appendChild(item);
                 });
             }
         }
 
-        function handleIncomingStream(stream) {
-            const videoElem = document.getElementById('main-video');
-            if(stream && stream.getVideoTracks().length > 0) {
-                videoElem.srcObject = stream;
+        function handleTrackStarted(evt) {
+            if (evt.track.kind === 'video') {
+                const videoElem = document.getElementById('main-video');
+                videoElem.srcObject = new MediaStream([evt.track]);
                 videoElem.classList.remove('hidden');
                 document.getElementById('waiting-placeholder').classList.add('hidden');
             }
         }
 
-        async function toggleMic() {
-            if(!myStream) {
+        function handleTrackStopped(evt) {
+            if (evt.track.kind === 'video') {
+                document.getElementById('main-video').classList.add('hidden');
+                document.getElementById('waiting-placeholder').classList.remove('hidden');
+            }
+        }
+
+        async function toggleScreenShare() {
+            if (!isSharingScreen) {
                 try {
-                    myStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                } catch(e) {
-                    alert("Accès au microphone refusé.");
-                    return;
-                }
-            }
-            const track = myStream.getAudioTracks()[0];
-            track.enabled = !track.enabled;
-            
-            const btn = document.getElementById('btn-mic');
-            if(track.enabled) {
-                btn.innerHTML = `<i class="fa-solid fa-microphone text-emerald-400"></i>`;
+                    await callObject.startScreenShare();
+                    isSharingScreen = true;
+                    document.getElementById('btn-share').classList.replace('bg-emerald-600', 'bg-amber-600');
+                    document.getElementById('btn-share').innerHTML = `<i class="fa-solid fa-stop"></i> Arrêter le partage`;
+                } catch(e) { console.error(e); }
             } else {
-                btn.innerHTML = `<i class="fa-solid fa-microphone-slash text-red-400"></i>`;
+                await callObject.stopScreenShare();
+                isSharingScreen = false;
+                document.getElementById('btn-share').classList.replace('bg-amber-600', 'bg-emerald-600');
+                document.getElementById('btn-share').innerHTML = `<i class="fa-solid fa-display"></i> Partager l'écran`;
             }
+        }
+
+        async function toggleMic() {
+            const localParticipant = callObject.participants().local;
+            const currentAudio = localParticipant.audio;
+            await callObject.setLocalAudio(!currentAudio);
+            updateMicUI(!currentAudio);
+        }
+
+        function updateMicUI(enabled) {
+            const btn = document.getElementById('btn-mic');
+            btn.innerHTML = enabled ? 
+                `<i class="fa-solid fa-microphone text-emerald-400"></i>` : 
+                `<i class="fa-solid fa-microphone-slash text-red-400"></i>`;
         }
 
         function muteAllStudents(muteState) {
-            Object.values(connections).forEach(conn => {
-                conn.send({ type: 'COMMAND_MUTE', payload: muteState });
-            });
+            if (!isTeacher) return;
+            callObject.sendAppMessage({ type: 'COMMAND_MUTE', payload: muteState });
         }
 
-        function handleDataConnection(conn) {
-            connections[conn.peer] = conn;
-
-            conn.on('data', (data) => {
-                if(data.type === 'CHAT') {
-                    appendMessage(data.sender, data.text);
-                    if(document.getElementById('sidebar-chat').classList.contains('hidden')) {
-                        document.getElementById('chat-badge').classList.remove('hidden');
-                    }
-                } else if(data.type === 'HAND_RAISE') {
-                    alert(`Un élève a levé la main : ${data.sender}`);
-                } else if(data.type === 'COMMAND_MUTE' && !isTeacher) {
-                    if(myStream && myStream.getAudioTracks().length > 0) {
-                        myStream.getAudioTracks()[0].enabled = !data.payload;
-                        const btn = document.getElementById('btn-mic');
-                        btn.innerHTML = data.payload ? `<i class="fa-solid fa-microphone-slash text-red-400"></i>` : `<i class="fa-solid fa-microphone text-emerald-400"></i>`;
-                    }
-                    alert(data.payload ? "Votre micro a été coupé par le professeur." : "Votre micro a été activé par le professeur.");
-                } else if(data.type === 'STOP_SCREEN' && !isTeacher) {
-                    document.getElementById('main-video').classList.add('hidden');
-                    document.getElementById('waiting-placeholder').classList.remove('hidden');
-                } else if(data.type === 'END_SESSION' && !isTeacher) {
-                    alert("La séance a été terminée par le professeur.");
-                    location.reload();
-                }
-            });
-
-            conn.on('open', () => {
-                if(isTeacher) {
-                    const studentName = conn.metadata ? conn.metadata.name : 'Élève';
-                    addRosterItem(conn.peer, studentName, false);
-                    updateStudentCount();
-                    
-                    if(screenStream) {
-                        setTimeout(() => {
-                            peer.call(conn.peer, screenStream);
-                        }, 1000);
-                    }
-                }
-            });
-
-            conn.on('close', () => {
-                if(isTeacher) {
-                    removeRosterItem(conn.peer);
-                    updateStudentCount();
-                }
-            });
-        }
-
-        function endSession() {
-            if(confirm('Voulez-vous vraiment terminer la séance pour tous les participants ?')) {
-                Object.values(connections).forEach(conn => {
-                    conn.send({ type: 'END_SESSION' });
-                });
+        function handleAppMessage(evt) {
+            const data = evt.data;
+            if (data.type === 'CHAT') {
+                appendMessage(data.sender, data.text);
+            } else if (data.type === 'HAND_RAISE' && isTeacher) {
+                alert(`Un élève a levé la main : ${data.sender}`);
+            } else if (data.type === 'COMMAND_MUTE' && !isTeacher) {
+                callObject.setLocalAudio(!data.payload);
+                updateMicUI(!data.payload);
+                alert(data.payload ? "Votre micro a été coupé." : "Votre micro a été activé.");
+            } else if (data.type === 'END_SESSION' && !isTeacher) {
+                alert("La séance a été terminée.");
                 location.reload();
             }
         }
@@ -398,10 +304,9 @@
             const text = input.value.trim();
             if(!text) return;
 
+            const senderName = isTeacher ? 'Professeur' : 'Élève';
             appendMessage('Moi', text);
-            Object.values(connections).forEach(conn => {
-                conn.send({ type: 'CHAT', sender: isTeacher ? 'Professeur' : 'Élève', text: text });
-            });
+            callObject.sendAppMessage({ type: 'CHAT', sender: senderName, text: text });
             input.value = '';
         }
 
@@ -415,29 +320,28 @@
         }
 
         function raiseHand() {
-            Object.values(connections).forEach(conn => {
-                conn.send({ type: 'HAND_RAISE', sender: 'Élève' });
-            });
-            alert('Votre signal de main levée a été envoyé au professeur.');
+            callObject.sendAppMessage({ type: 'HAND_RAISE', sender: callObject.participants().local.user_name });
+            alert('Votre signal a été envoyé.');
         }
 
-        function addRosterItem(id, name, isSelf) {
-            const list = document.getElementById('roster-list');
-            const item = document.createElement('div');
-            item.id = `user-${id}`;
-            item.className = "flex items-center justify-between bg-slate-700 p-2.5 rounded-lg text-sm";
-            item.innerHTML = `<span>${name}</span><i class="fa-solid fa-microphone text-slate-400"></i>`;
-            list.appendChild(item);
+        function endSession() {
+            if(confirm('Terminer la séance pour tous ?')) {
+                callObject.sendAppMessage({ type: 'END_SESSION' });
+                callObject.leave();
+                location.reload();
+            }
         }
 
-        function removeRosterItem(id) {
-            const item = document.getElementById(`user-${id}`);
-            if(item) item.remove();
-        }
-
-        function updateStudentCount() {
-            const count = Object.keys(connections).length + 1;
-            document.getElementById('student-count-badge').innerText = `Participants : ${count}`;
+        function toggleSidebar(type) {
+            const roster = document.getElementById('sidebar-roster');
+            const chat = document.getElementById('sidebar-chat');
+            if(type === 'list') {
+                roster.classList.toggle('hidden');
+                chat.classList.add('hidden');
+            } else {
+                chat.classList.toggle('hidden');
+                roster.classList.add('hidden');
+            }
         }
 
         function toggleFullscreen() {
@@ -449,16 +353,14 @@
         }
 
         function toggleRecording() {
+            const videoElem = document.getElementById('main-video');
             if(!recordedChunks.length && !mediaRecorder) {
-                const streamToRecord = screenStream || myStream;
-                if(!streamToRecord) return alert("Aucun contenu à enregistrer ! Partagez d'abord votre écran.");
-                
-                mediaRecorder = new MediaRecorder(streamToRecord, { mimeType: 'video/webm;codecs=vp9,opus' });
-                mediaRecorder.ondataavailable = e => { if(e.data.size > 0) recordedChunks.push(e.data); };
+                if(!videoElem.srcObject) return alert("Partagez votre écran pour enregistrer !");
+                mediaRecorder = new MediaRecorder(videoElem.srcObject, { mimeType: 'video/webm' });
+                mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
                 mediaRecorder.onstop = saveVideoFile;
                 mediaRecorder.start();
                 document.getElementById('btn-record').innerHTML = `<i class="fa-solid fa-stop"></i> Stop Enregistrement`;
-                document.getElementById('btn-record').classList.replace('bg-red-600', 'bg-amber-600');
             } else {
                 mediaRecorder.stop();
             }
@@ -474,7 +376,6 @@
             recordedChunks = [];
             mediaRecorder = null;
             document.getElementById('btn-record').innerHTML = `<i class="fa-solid fa-circle"></i> Enregistrer`;
-            document.getElementById('btn-record').classList.replace('bg-amber-600', 'bg-red-600');
         }
     </script>
 </body>
