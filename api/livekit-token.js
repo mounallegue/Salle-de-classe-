@@ -27,7 +27,6 @@ module.exports = async function handler(req, res) {
     return res.status(403).json({ error: 'Code d’accès professeur incorrect.' });
   }
 
-  // The teacher identity is reserved, preventing students from claiming teacher privileges.
   const identity = role === 'teacher' ? 'professeur' :
     (typeof body.identity === 'string' ? body.identity.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) : '');
   if (!identity || (role === 'student' && identity === 'professeur')) {
@@ -38,7 +37,8 @@ module.exports = async function handler(req, res) {
     const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,
       name: displayName,
-      ttl: '15m',
+      // Four hours gives participants margin for a three-hour lesson, including reconnects.
+      ttl: '4h',
     });
     token.addGrant({
       roomJoin: true,
