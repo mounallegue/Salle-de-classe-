@@ -1,0 +1,9 @@
+{
+  "name": "salle-de-classe-virtuelle",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Salle de classe virtuelle avec LiveKit sur Vercel",
+  "dependencies": {
+    "livekit-server-sdk": "^2.13.3"
+  }
+}

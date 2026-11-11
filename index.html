@@ -1,253 +1,317 @@
 <!DOCTYPE html>
 <html lang="fr" dir="ltr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Salle de classe virtuelle</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- LiveKit Client SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.js"></script>
-    <style>
-        .blackboard { background-color: #1e293b; border: 8px solid #0f172a; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salle de classe virtuelle</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.js"></script>
+  <style>.blackboard{background:#1e293b;border:8px solid #0f172a}</style>
 </head>
 <body class="bg-slate-900 text-white font-sans h-screen flex flex-col">
-
-    <!-- Navbar -->
-    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex justify-between items-center">
-        <div class="flex items-center gap-3">
-            <i class="fa-solid font-bold fa-chalkboard-user text-emerald-400 text-2xl"></i>
-            <h1 class="text-xl font-bold">Salle de classe virtuelle</h1>
-        </div>
-        <div class="flex items-center gap-4">
-            <div id="room-info" class="hidden flex items-center gap-4 text-sm bg-slate-700 px-4 py-1.5 rounded-full">
-                <span>Salle : <strong class="text-emerald-400">visioclasse</strong></span>
-                <span id="student-count-badge" class="bg-slate-600 px-2 py-0.5 rounded-full text-xs">Participants : 1</span>
-            </div>
-            <!-- Bouton Fin de Séance (Professeur uniquement) -->
-            <button id="btn-end-session" onclick="endSession()" class="hidden bg-red-700 hover:bg-red-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-2">
-                <i class="fa-solid fa-power-off"></i> Terminer la séance
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Container -->
-    <div class="flex-1 flex overflow-hidden relative">
-
-        <!-- Role Selection Modal -->
-        <div id="role-modal" class="absolute inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
-            <div class="bg-slate-800 p-8 rounded-2xl max-w-md w-full border border-slate-700 shadow-2xl text-center">
-                <h2 class="text-2xl font-bold mb-6 text-emerald-400">Connexion à la classe</h2>
-                
-                <!-- Section Professeur -->
-                <div class="space-y-3 mb-6 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
-                    <h3 class="text-sm font-semibold text-emerald-300 text-right">Espace Professeur</h3>
-                    <input type="email" id="teacher-email-input" placeholder="Email (ex: prof.salle@gmail.com)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-emerald-500 text-sm">
-                    <button onclick="setupTeacher()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition text-sm">
-                        <i class="fa-solid fa-user-tie"></i> Connexion Professeur
-                    </button>
-                </div>
-
-                <div class="relative my-4">
-                    <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-600"></div></div>
-                    <div class="relative flex justify-center text-xs text-slate-400"><span class="bg-slate-800 px-2">ou</span></div>
-                </div>
-
-                <!-- Section Élève -->
-                <div class="space-y-3 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
-                    <h3 class="text-sm font-semibold text-blue-300 text-right">Espace Élève</h3>
-                    <input type="text" id="student-name" placeholder="Nom et Prénom de l'élève" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
-                    <input type="text" id="room-code-input" placeholder="Code de la salle (ex: 123456)" class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white focus:outline-none focus:border-blue-500 text-sm">
-                    <button onclick="setupStudent()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition text-sm">
-                        <i class="fa-solid fa-graduation-cap"></i> Rejoindre la classe
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Display / Blackboard -->
-        <main class="flex-1 flex flex-col p-4 bg-slate-950 relative">
-            <div class="flex-1 blackboard rounded-2xl flex items-center justify-center relative overflow-hidden shadow-inner">
-                <video id="main-video" autoplay playsinline class="w-full h-full object-contain hidden"></video>
-                <audio id="remote-audio" autoplay></audio>
-                
-                <div id="waiting-placeholder" class="text-center p-8 space-y-4">
-                    <i class="fa-solid fa-desktop text-6xl text-slate-600 animate-pulse"></i>
-                    <p id="placeholder-text" class="text-slate-400 text-lg">Le cours apparaîtra dès que le professeur partagera son écran.</p>
-                </div>
-            </div>
-
-            <!-- Controls Bar -->
-            <div id="controls-bar" class="mt-4 bg-slate-800 p-3 rounded-xl flex items-center justify-between border border-slate-700 hidden">
-                <div class="flex items-center gap-3">
-                    <button id="btn-mic" onclick="toggleMic()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white transition">
-                        <i class="fa-solid fa-microphone-slash text-red-400"></i>
-                    </button>
-
-                    <!-- Teacher Controls -->
-                    <div id="teacher-controls" class="hidden flex items-center gap-3">
-                        <button id="btn-share" onclick="toggleScreenShare()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2 text-sm">
-                            <i class="fa-solid fa-display"></i> Partager l'écran
-                        </button>
-                        <button id="btn-record" onclick="toggleRecording()" class="bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2 text-sm">
-                            <i class="fa-solid fa-circle"></i> Enregistrer
-                        </button>
-                    </div>
-
-                    <!-- Student Controls -->
-                    <div id="student-controls" class="hidden flex items-center gap-3">
-                        <button id="btn-raise-hand" onclick="raiseHand()" class="bg-amber-600 hover:bg-amber-500 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2 text-sm">
-                            <i class="fa-solid fa-hand"></i> Lever la main
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <button id="btn-toggle-list" onclick="toggleSidebar('list')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white hidden relative">
-                        <i class="fa-solid fa-users"></i>
-                    </button>
-                    <button id="btn-toggle-chat" onclick="toggleSidebar('chat')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white relative">
-                        <i class="fa-solid fa-comments"></i>
-                        <span id="chat-badge" class="absolute -top-1 -right-1 bg-red-500 text-xs w-4 h-4 rounded-full hidden"></span>
-                    </button>
-                    <button onclick="toggleFullscreen()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg text-white">
-                        <i class="fa-solid fa-expand"></i>
-                    </button>
-                </div>
-            </div>
-        </main>
-
-        <!-- Sidebar Roster -->
-        <aside id="sidebar-roster" class="w-80 bg-slate-800 border-l border-slate-700 flex flex-col hidden">
-            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
-                <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-users"></i> Liste des élèves</h3>
-                <div class="flex gap-1">
-                    <button onclick="muteAllStudents(true)" class="bg-red-600/20 text-red-400 p-1.5 rounded text-xs">Tout couper</button>
-                    <button onclick="muteAllStudents(false)" class="bg-emerald-600/20 text-emerald-400 p-1.5 rounded text-xs">Tout activer</button>
-                </div>
-            </div>
-            <div id="roster-list" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
-        </aside>
-
-        <!-- Sidebar Chat -->
-        <aside id="sidebar-chat" class="w-80 bg-slate-800 border-l border-slate-700 flex flex-col hidden">
-            <div class="p-4 border-b border-slate-700 flex justify-between items-center">
-                <h3 class="font-bold flex items-center gap-2"><i class="fa-solid fa-comments"></i> Espace Messages</h3>
-            </div>
-            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
-            <div class="p-3 border-t border-slate-700 flex gap-2">
-                <input type="text" id="chat-input" placeholder="Écrire un message..." class="flex-1 bg-slate-700 px-3 py-2 rounded-lg text-sm text-white focus:outline-none">
-                <button onclick="sendMessage()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-2 rounded-lg text-white"><i class="fa-solid fa-paper-plane"></i></button>
-            </div>
-        </aside>
-
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex justify-between items-center">
+    <div class="flex items-center gap-3"><i class="fa-solid fa-chalkboard-user text-emerald-400 text-2xl"></i><h1 class="text-xl font-bold">Salle de classe virtuelle</h1></div>
+    <div class="flex items-center gap-4">
+      <div id="room-info" class="hidden flex items-center gap-4 text-sm bg-slate-700 px-4 py-1.5 rounded-full"><span>Salle : <strong class="text-emerald-400">visioclasse</strong></span><span id="student-count-badge" class="bg-slate-600 px-2 py-0.5 rounded-full text-xs">Participants : 0</span></div>
+      <button id="btn-end-session" onclick="endSession()" class="hidden bg-red-700 hover:bg-red-600 px-3 py-1.5 rounded-lg text-sm font-semibold"><i class="fa-solid fa-power-off"></i> Terminer la séance</button>
     </div>
+  </header>
+  <div class="flex-1 flex overflow-hidden relative">
+    <div id="role-modal" class="absolute inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-800 p-8 rounded-2xl max-w-md w-full border border-slate-700 shadow-2xl text-center">
+        <h2 class="text-2xl font-bold mb-6 text-emerald-400">Connexion à la classe</h2>
+        <form id="teacher-form" class="space-y-3 mb-6 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+          <h3 class="text-sm font-semibold text-emerald-300 text-right">Espace Professeur</h3>
+          <input type="password" id="teacher-access-code" autocomplete="current-password" placeholder="Code d’accès professeur" required class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm">
+          <button class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-sm"><i class="fa-solid fa-user-tie"></i> Connexion Professeur</button>
+        </form>
+        <div class="relative my-4"><div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-600"></div></div><div class="relative flex justify-center text-xs text-slate-400"><span class="bg-slate-800 px-2">ou</span></div></div>
+        <form id="student-form" class="space-y-3 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+          <h3 class="text-sm font-semibold text-blue-300 text-right">Espace Élève</h3>
+          <input type="text" id="student-name" maxlength="60" placeholder="Nom et prénom" required class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm">
+          <input type="text" id="room-code-input" placeholder="Code de la salle : visioclasse" required class="w-full px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm">
+          <button class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-sm"><i class="fa-solid fa-graduation-cap"></i> Rejoindre la classe</button>
+        </form>
+        <p id="status-message" role="status" class="text-sm text-amber-300 mt-4"></p>
+      </div>
+    </div>
+    <main class="flex-1 flex flex-col p-4 bg-slate-950 relative">
+      <div class="flex-1 blackboard rounded-2xl flex items-center justify-center relative overflow-hidden shadow-inner">
+        <video id="main-video" autoplay playsinline class="w-full h-full object-contain hidden"></video>
+        <div id="remote-audio-container" class="hidden"></div>
+        <div id="waiting-placeholder" class="text-center p-8 space-y-4"><i class="fa-solid fa-desktop text-6xl text-slate-600 animate-pulse"></i><p class="text-slate-400 text-lg">Le cours apparaîtra dès que le professeur partagera son écran.</p></div>
+      </div>
+      <div id="controls-bar" class="mt-4 bg-slate-800 p-3 rounded-xl flex items-center justify-between border border-slate-700 hidden">
+        <div class="flex items-center gap-3">
+          <button id="btn-mic" onclick="toggleMic()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg" title="Activer/couper le micro"><i class="fa-solid fa-microphone-slash text-red-400"></i></button>
+          <div id="teacher-controls" class="hidden flex items-center gap-3">
+            <button id="btn-share" onclick="toggleScreenShare()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 rounded-lg font-semibold text-sm"><i class="fa-solid fa-display"></i> Partager l’écran</button>
+            <button id="btn-record" onclick="toggleRecording()" class="bg-red-600 hover:bg-red-500 px-4 py-2.5 rounded-lg font-semibold text-sm"><i class="fa-solid fa-circle"></i> Enregistrer l’écran</button>
+          </div>
+          <div id="student-controls" class="hidden"><button onclick="raiseHand()" class="bg-amber-600 hover:bg-amber-500 px-4 py-2.5 rounded-lg font-semibold text-sm"><i class="fa-solid fa-hand"></i> Lever la main</button></div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="btn-toggle-list" onclick="toggleSidebar('list')" class="hidden bg-slate-700 hover:bg-slate-600 p-3 rounded-lg" title="Participants"><i class="fa-solid fa-users"></i></button>
+          <button onclick="toggleSidebar('chat')" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg relative" title="Messages"><i class="fa-solid fa-comments"></i><span id="chat-badge" class="absolute -top-1 -right-1 bg-red-500 text-xs w-4 h-4 rounded-full hidden"></span></button>
+          <button onclick="toggleFullscreen()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg" title="Plein écran"><i class="fa-solid fa-expand"></i></button>
+        </div>
+      </div>
+    </main>
+    <aside id="sidebar-roster" class="w-80 bg-slate-800 border-l border-slate-700 flex flex-col hidden">
+      <div class="p-4 border-b border-slate-700 flex justify-between items-center"><h3 class="font-bold"><i class="fa-solid fa-users"></i> Participants</h3><div class="flex gap-1"><button onclick="muteAllStudents(true)" class="bg-red-600/20 text-red-300 p-1.5 rounded text-xs">Couper les micros</button><button onclick="muteAllStudents(false)" class="bg-emerald-600/20 text-emerald-300 p-1.5 rounded text-xs">Autoriser les micros</button></div></div>
+      <div id="roster-list" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+    </aside>
+    <aside id="sidebar-chat" class="w-80 bg-slate-800 border-l border-slate-700 flex flex-col hidden">
+      <div class="p-4 border-b border-slate-700"><h3 class="font-bold"><i class="fa-solid fa-comments"></i> Messages</h3></div>
+      <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+      <form id="chat-form" class="p-3 border-t border-slate-700 flex gap-2"><input id="chat-input" maxlength="500" placeholder="Écrire un message…" class="flex-1 bg-slate-700 px-3 py-2 rounded-lg text-sm"><button class="bg-emerald-600 hover:bg-emerald-500 px-3 rounded-lg" aria-label="Envoyer"><i class="fa-solid fa-paper-plane"></i></button></form>
+    </aside>
+  </div>
+<script>
+'use strict';
+const ROOM_NAME = 'visioclasse';
+let room = null;
+let isTeacher = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+let muteStudents = false;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const $ = id => document.getElementById(id);
 
-    <!-- LiveKit Core Logic -->
-    <script>
-        const AUTHORIZED_TEACHER_EMAIL = "prof.salle@gmail.com";
-        const LIVEKIT_URL = "wss://visioclass-w13jjyjc.livekit.cloud"; //[cite: 4]
-        
-        let room = null;
-        let isTeacher = false;
-        let micTrack = null;
-        let screenTrack = null;
-        let mediaRecorder = null;
-        let recordedChunks = [];
+$('teacher-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  isTeacher = true;
+  await connectToLiveKit('professeur', 'Professeur', $('teacher-access-code').value);
+});
+$('student-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if ($('room-code-input').value.trim().toLowerCase() !== ROOM_NAME) {
+    setStatus('Code de salle incorrect. Utilisez : ' + ROOM_NAME);
+    return;
+  }
+  const name = $('student-name').value.trim();
+  if (!name) return;
+  const identity = 'eleve-' + Math.random().toString(36).slice(2, 10);
+  isTeacher = false;
+  await connectToLiveKit(identity, name, '');
+});
+$('chat-form').addEventListener('submit', event => { event.preventDefault(); sendMessage(); });
 
-        async function setupTeacher() {
-            const email = document.getElementById('teacher-email-input').value.trim().toLowerCase();
-            if(!email || !email.includes('@')) {
-                alert("Veuillez entrer un email valide.");
-                return;
-            }
-            isTeacher = true;
-            // توليد توكن تجريبي للأستاذ مباشرة عبر واجهة LiveKit العامة أو اتصال مباشر
-            await connectToLiveKit("ClassePrincipale", "Professeur", true);
-            
-            document.getElementById('teacher-controls').classList.remove('hidden');
-            document.getElementById('btn-end-session').classList.remove('hidden');
-            document.getElementById('btn-toggle-list').classList.remove('hidden');
-            document.getElementById('sidebar-roster').classList.remove('hidden');
-        }
-
-        async function setupStudent() {
-            const name = document.getElementById('student-name').value.trim();
-            const code = document.getElementById('room-code-input').value.trim();
-            if(!name || !code) return alert("Veuillez remplir tous les champs.");
-
-            isTeacher = false;
-            await connectToLiveKit(code, name, false);
-            document.getElementById('student-controls').classList.remove('hidden');
-        }
-
-        async function connectToLiveKit(roomName, participantName, isOwner) {
-            try {
-                room = new LivekitClient.Room();
-
-                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-                    if (track.kind === LivekitClient.Track.Kind.Video) {
-                        const videoElement = document.getElementById('main-video');
-                        track.attach(videoElement);
-                        videoElement.classList.remove('hidden');
-                        document.getElementById('waiting-placeholder').classList.add('hidden');
-                    } else if (track.kind === LivekitClient.Track.Kind.Audio) {
-                        const audioElement = document.getElementById('remote-audio');
-                        track.attach(audioElement);
-                    }
-                })
-                .on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
-                    if (track.kind === 'video') {
-                        document.getElementById('main-video').classList.add('hidden');
-                        document.getElementById('waiting-placeholder').classList.remove('hidden');
-                    }
-                })
-                .on(LivekitClient.RoomEvent.ParticipantConnected, updateParticipantsList)
-                .on(LivekitClient.RoomEvent.ParticipantDisconnected, updateParticipantsList)
-                .on(LivekitClient.RoomEvent.DataReceived, handleDataMessage);
-
-                // ملاحظة: للحصول على Token مجاني سريع للاختبار المباشر بدون خادم، يمكنك توليده من لوحة تحكم LiveKit أو استخدام خدمة توليد الـ Token. هنا سنستخدم اتصال تجريبي مباشر:
-                // ملاحظة هامة: في الإنتاج الحقيقي على Vercel، يُفضل وضع API Key و Secret في API route، لكن للتشغيل الفوري سنربط الغرفة مباشرة:
-                
-                // للحصول على Token سريع يمكنك فتحه من لوحة تحكم LiveKit وتوليد Token مؤقت، أو استخدام مكتبة الرمز أدناه:
-                // سنقوم بطلب إنشاء الاتصال:
-                const token = await generateTestToken(roomName, participantName, isOwner);
-                
-                await room.connect(LIVEKIT_URL, token); //[cite: 4]
-                
-                document.getElementById('role-modal').classList.add('hidden');
-                document.getElementById('room-info').classList.remove('hidden');
-                document.getElementById('controls-bar').classList.remove('hidden');
-
-                // تفعيل المايك للأستاذ وكتمه للتلميذ افتراضياً
-                if (isOwner) {
-                    await room.localParticipant.enableMicrophone();
-                    updateMicUI(true);
-                } else {
-                    updateMicUI(false);
-                }
-
-                updateParticipantsList();
-
-            } catch (error) {
-                console.error("Erreur de connexion LiveKit:", error);
-                alert("Erreur de connexion au serveur LiveKit.");
-            }
-        }
-
-        // دالة توليد Token مؤقت للتجربة الفورية من المتصفح
-        async function generateTestToken(roomName, participantName, isOwner) {
-            // بما أن LiveKit Cloud يتطلب توقيع JWT، سنستخدم خدمة توليد مجانية أو دالة محلية مبسطة
-            // للتجربة المباشرة، يمكنك استخدام مفتاحك عبر توليد Token من لوحة تحكم LiveKit لصقها هنا مباشرة، أو استخدام الرابط التالي:
-            // للتبسيط، سنستدعي واجهة توليد محلية:
-            return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."; // استبدلها بـ Token حقيقي من لوحة تحكم LiveKit أو استخدم التوثيق السحابي
-        }
-
-        // ملاحظة لتسهيل التشغيل الفوري بدون تعقيد الـ JWT يدوياً: 
-        // يمكنك نسخ Token مباشر لمدة 24 ساعة من لوحة تحكم LiveKit (Project -> CLI / Tokens) ووضعه هنا مباشرة ليتم دخول الأستاذ والتلاميذ بسلاسة تامة.
-    </script>
+function setStatus(message) { $('status-message').textContent = message || ''; }
+async function connectToLiveKit(identity, displayName, teacherCode) {
+  if (!window.LivekitClient) { setStatus('Le SDK LiveKit n’a pas pu être chargé. Rechargez la page.'); return; }
+  setStatus('Connexion en cours…');
+  try {
+    const response = await fetch('/api/livekit-token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identity, name: displayName, role: isTeacher ? 'teacher' : 'student', room: ROOM_NAME, teacherCode })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Impossible de générer un jeton de connexion.');
+    room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => attachTrack(track, publication, participant));
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, track => detachTrack(track));
+    room.on(LivekitClient.RoomEvent.LocalTrackPublished, publication => {
+      if (publication.source === LivekitClient.Track.Source.ScreenShare && publication.track) showScreenTrack(publication.track);
+    });
+    room.on(LivekitClient.RoomEvent.LocalTrackUnpublished, publication => {
+      if (publication.source === LivekitClient.Track.Source.ScreenShare) resetVideo();
+    });
+    room.on(LivekitClient.RoomEvent.ParticipantConnected, updateParticipantsList);
+    room.on(LivekitClient.RoomEvent.ParticipantDisconnected, updateParticipantsList);
+    room.on(LivekitClient.RoomEvent.DataReceived, handleDataMessage);
+    room.on(LivekitClient.RoomEvent.Disconnected, () => setStatus('Déconnecté de la salle.'));
+    await room.connect(result.url, result.token);
+    $('role-modal').classList.add('hidden');
+    $('room-info').classList.remove('hidden');
+    $('controls-bar').classList.remove('hidden');
+    if (isTeacher) {
+      $('teacher-controls').classList.remove('hidden');
+      $('btn-end-session').classList.remove('hidden');
+      $('btn-toggle-list').classList.remove('hidden');
+      $('sidebar-roster').classList.remove('hidden');
+      await room.localParticipant.setMicrophoneEnabled(true);
+    } else {
+      $('student-controls').classList.remove('hidden');
+      await room.localParticipant.setMicrophoneEnabled(false);
+    }
+    updateMicUI(Boolean(room.localParticipant.isMicrophoneEnabled));
+    updateParticipantsList();
+    setStatus('');
+  } catch (error) {
+    console.error('LiveKit connection error:', error);
+    setStatus(error.message || 'Connexion impossible. Vérifiez le code d’accès et la configuration Vercel.');
+    if (room) { try { await room.disconnect(); } catch (_) {} room = null; }
+  }
+}
+function attachTrack(track, publication, participant) {
+  if (track.kind === LivekitClient.Track.Kind.Video && publication.source === LivekitClient.Track.Source.ScreenShare) {
+    showScreenTrack(track);
+  } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+    const element = track.attach();
+    element.autoplay = true;
+    $('remote-audio-container').appendChild(element);
+  }
+}
+function showScreenTrack(track) {
+  const video = $('main-video');
+  video.srcObject = null;
+  track.attach(video);
+  video.classList.remove('hidden');
+  $('waiting-placeholder').classList.add('hidden');
+  video.play().catch(() => {});
+}
+function detachTrack(track) {
+  track.detach().forEach(element => element.remove());
+  if (track.kind === LivekitClient.Track.Kind.Video) resetVideo();
+}
+function resetVideo() {
+  const video = $('main-video');
+  video.srcObject = null;
+  video.classList.add('hidden');
+  $('waiting-placeholder').classList.remove('hidden');
+}
+function updateParticipantsList() {
+  if (!room) return;
+  const local = room.localParticipant;
+  const participants = [local, ...room.remoteParticipants.values()];
+  $('student-count-badge').textContent = 'Participants : ' + participants.length;
+  if (!isTeacher) return;
+  const list = $('roster-list');
+  list.replaceChildren();
+  participants.forEach(participant => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center justify-between bg-slate-700 p-2.5 rounded-lg text-sm';
+    const name = document.createElement('span');
+    name.textContent = participant.name || participant.identity || 'Participant';
+    const icon = document.createElement('i');
+    icon.className = 'fa-solid ' + (participant.isMicrophoneEnabled ? 'fa-microphone text-emerald-400' : 'fa-microphone-slash text-slate-400');
+    row.append(name, icon);
+    list.appendChild(row);
+  });
+}
+async function toggleMic() {
+  if (!room) return;
+  try {
+    const enabled = !room.localParticipant.isMicrophoneEnabled;
+    await room.localParticipant.setMicrophoneEnabled(enabled);
+    updateMicUI(enabled);
+    updateParticipantsList();
+  } catch (error) { alert('Impossible d’accéder au microphone. Vérifiez les autorisations du navigateur.'); }
+}
+function updateMicUI(enabled) {
+  $('btn-mic').innerHTML = enabled ? '<i class="fa-solid fa-microphone text-emerald-400"></i>' : '<i class="fa-solid fa-microphone-slash text-red-400"></i>';
+}
+async function toggleScreenShare() {
+  if (!room || !isTeacher) return;
+  try {
+    const enabled = !room.localParticipant.isScreenShareEnabled;
+    await room.localParticipant.setScreenShareEnabled(enabled);
+    $('btn-share').classList.toggle('bg-emerald-600', !enabled);
+    $('btn-share').classList.toggle('bg-amber-600', enabled);
+    $('btn-share').innerHTML = enabled ? '<i class="fa-solid fa-stop"></i> Arrêter le partage' : '<i class="fa-solid fa-display"></i> Partager l’écran';
+  } catch (error) { console.error(error); alert('Le partage d’écran a échoué ou a été annulé.'); }
+}
+async function publishMessage(message) {
+  if (!room) return;
+  await room.localParticipant.publishData(encoder.encode(JSON.stringify(message)), { reliable: true });
+}
+async function muteAllStudents(muted) {
+  if (!isTeacher || !room) return;
+  muteStudents = muted;
+  try { await publishMessage({ type: 'COMMAND_MUTE', payload: muted }); }
+  catch (error) { alert('Impossible d’envoyer la commande aux élèves.'); }
+}
+function handleDataMessage(payload, participant) {
+  try {
+    const data = JSON.parse(decoder.decode(payload));
+    const fromTeacher = participant && participant.identity === 'professeur';
+    if (data.type === 'CHAT' && typeof data.text === 'string') {
+      appendMessage(data.sender || participant?.name || 'Participant', data.text);
+      if ($('sidebar-chat').classList.contains('hidden')) $('chat-badge').classList.remove('hidden');
+    } else if (data.type === 'HAND_RAISE' && isTeacher) {
+      alert((data.sender || participant?.name || 'Un élève') + ' a levé la main.');
+    } else if (data.type === 'COMMAND_MUTE' && !isTeacher && fromTeacher) {
+      room.localParticipant.setMicrophoneEnabled(!data.payload).then(() => updateMicUI(!data.payload)).catch(() => {});
+    } else if (data.type === 'END_SESSION' && !isTeacher && fromTeacher) {
+      alert('La séance a été terminée par le professeur.');
+      room.disconnect().finally(() => location.reload());
+    }
+  } catch (error) { console.warn('Message de salle ignoré:', error); }
+}
+async function sendMessage() {
+  const input = $('chat-input');
+  const text = input.value.trim();
+  if (!text || !room) return;
+  try {
+    await publishMessage({ type: 'CHAT', sender: isTeacher ? 'Professeur' : ($('student-name').value.trim() || 'Élève'), text });
+    appendMessage('Moi', text);
+    input.value = '';
+  } catch (error) { alert('Envoi du message impossible.'); }
+}
+function appendMessage(sender, text) {
+  const item = document.createElement('div');
+  item.className = 'bg-slate-700 p-2.5 rounded-lg text-sm';
+  const label = document.createElement('strong');
+  label.className = 'text-emerald-400 block text-xs';
+  label.textContent = sender;
+  const body = document.createElement('p');
+  body.textContent = text;
+  item.append(label, body);
+  $('chat-messages').appendChild(item);
+  $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+}
+async function raiseHand() {
+  if (!room || isTeacher) return;
+  try { await publishMessage({ type: 'HAND_RAISE', sender: $('student-name').value.trim() || 'Élève' }); }
+  catch (error) { alert('Impossible d’envoyer le signal.'); }
+}
+async function endSession() {
+  if (!room || !isTeacher || !confirm('Terminer la séance pour tous les participants ?')) return;
+  try { await publishMessage({ type: 'END_SESSION' }); await new Promise(resolve => setTimeout(resolve, 300)); }
+  catch (_) {}
+  await room.disconnect();
+  location.reload();
+}
+function toggleSidebar(which) {
+  const roster = $('sidebar-roster');
+  const chat = $('sidebar-chat');
+  if (which === 'list') { roster.classList.toggle('hidden'); chat.classList.add('hidden'); }
+  else { chat.classList.toggle('hidden'); roster.classList.add('hidden'); $('chat-badge').classList.add('hidden'); }
+}
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+  else document.exitFullscreen?.();
+}
+function toggleRecording() {
+  const video = $('main-video');
+  if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.stop(); return; }
+  if (!video.captureStream || !video.srcObject) { alert('Démarrez d’abord le partage d’écran.'); return; }
+  const stream = video.captureStream();
+  if (!stream.getVideoTracks().length) { alert('Aucune vidéo à enregistrer.'); return; }
+  const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type));
+  if (!mimeType) { alert('L’enregistrement n’est pas pris en charge par ce navigateur.'); return; }
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType });
+  mediaRecorder.ondataavailable = event => { if (event.data.size) recordedChunks.push(event.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'cours-' + new Date().toISOString().slice(0, 10) + '.webm';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    recordedChunks = [];
+    $('btn-record').innerHTML = '<i class="fa-solid fa-circle"></i> Enregistrer l’écran';
+    $('btn-record').classList.replace('bg-amber-600', 'bg-red-600');
+  };
+  mediaRecorder.start(1000);
+  $('btn-record').innerHTML = '<i class="fa-solid fa-stop"></i> Arrêter l’enregistrement';
+  $('btn-record').classList.replace('bg-red-600', 'bg-amber-600');
+}
+window.addEventListener('beforeunload', () => { if (room) room.disconnect(); });
+</script>
 </body>
 </html>
